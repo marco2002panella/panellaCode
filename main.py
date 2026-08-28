@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-import typer
-
-app = typer.Typer(name="myagent", help="Personal parallel task orchestrator")
+from src.cli import app
 
 
-@app.callback()
 def main():
-    pass
+    app()
 
 
 if __name__ == "__main__":
-    app()
+    main()
