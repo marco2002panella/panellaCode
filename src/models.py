@@ -24,6 +24,7 @@ class Wave(BaseModel):
     level: int
     tasks: List[Task] = Field(default_factory=list)
     status: Literal["pending", "running", "completed", "failed"] = "pending"
+    task_results: List[dict] = Field(default_factory=list)
 
 
 class ProviderConfig(BaseModel):
