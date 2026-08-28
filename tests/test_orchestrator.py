@@ -1,0 +1,122 @@
+from unittest.mock import MagicMock, patch
+import pytest
+
+from src.orchestrator import Orchestrator
+from src.models import Task, Wave
+
+
+def _make_task(tid: str, deps: list = None, model: str = "default") -> Task:
+    return Task(
+        id=tid,
+        description=f"Task {tid}",
+        context={"project_root": "/x", "output_file": f"{tid}.out", "related_files": []},
+        conventions={"framework": "", "language": "", "style": "", "code_split": []},
+        dependencies=deps or [],
+        level=0,
+        assigned_model=model,
+    )
+
+
+def test_orchestrator_init():
+    orch = Orchestrator(config={"providers": {}, "models": {"decomposer": "openai:gpt-4o-mini"}})
+    assert orch is not None
+    assert orch.client is not None
+
+
+def test_orchestrator_init_with_config_path():
+    with patch("src.orchestrator.load_config") as mock_load:
+        mock_load.return_value = {"providers": {}, "models": {}}
+        orch = Orchestrator(config_path="config/default.yaml")
+        mock_load.assert_called_once_with("config/default.yaml")
+
+
+def test_orchestrator_run_full_flow(tmp_path):
+    tasks = [
+        _make_task("t1"),
+        _make_task("t2", ["t1"]),
+    ]
+    waves = [
+        Wave(level=0, tasks=[tasks[0]], status="pending"),
+        Wave(level=1, tasks=[tasks[1]], status="pending"),
+    ]
+
+    with patch("src.orchestrator.decompose") as mock_decompose, \
+         patch("src.orchestrator.schedule") as mock_schedule, \
+         patch("src.orchestrator.execute_wave") as mock_execute, \
+         patch("src.orchestrator.generate_report") as mock_report, \
+         patch("src.orchestrator.save_report") as mock_save:
+
+        mock_decompose.return_value = tasks
+        mock_schedule.return_value = waves
+        mock_execute.side_effect = lambda w, d: w
+        mock_report.return_value = "# Report"
+        mock_save.return_value = str(tmp_path / "report.md")
+
+        orch = Orchestrator(config={"providers": {}, "models": {"decomposer": "openai:gpt-4o-mini"}})
+        result = orch.run("test problem", output_dir=str(tmp_path))
+
+        mock_decompose.assert_called_once()
+        mock_schedule.assert_called_once()
+        assert mock_execute.call_count == 2
+        mock_report.assert_called_once()
+        mock_save.assert_called_once()
+        assert result == "# Report"
+
+
+def test_orchestrator_run_with_model_map(tmp_path):
+    tasks = [
+        _make_task("t1"),
+    ]
+    waves = [
+        Wave(level=0, tasks=tasks, status="pending"),
+    ]
+
+    with patch("src.orchestrator.decompose") as mock_decompose, \
+         patch("src.orchestrator.schedule") as mock_schedule, \
+         patch("src.orchestrator.execute_wave") as mock_execute, \
+         patch("src.orchestrator.generate_report") as mock_report, \
+         patch("src.orchestrator.save_report") as mock_save:
+
+        mock_decompose.return_value = tasks
+        mock_schedule.return_value = waves
+        mock_execute.side_effect = lambda w, d: w
+        mock_report.return_value = "# Report"
+        mock_save.return_value = str(tmp_path / "report.md")
+
+        orch = Orchestrator(config={"providers": {}, "models": {"decomposer": "openai:gpt-4o-mini"}})
+        model_map = {
+            "decomposer": "openai:gpt-4o",
+            "executor_default": "openrouter:meta-llama/llama-3-8b-instruct",
+        }
+        orch.run("test problem", output_dir=str(tmp_path), model_map=model_map)
+
+        # Verify decomposer model from model_map was used
+        call_args = mock_decompose.call_args
+        assert call_args[0][2] == "openai:gpt-4o"
+
+        # Verify executor model override was applied
+        assert tasks[0].assigned_model == "openrouter:meta-llama/llama-3-8b-instruct"
+
+
+def test_orchestrator_run_creates_output_dirs(tmp_path):
+    tasks = [_make_task("t1")]
+    waves = [Wave(level=0, tasks=tasks, status="pending")]
+
+    with patch("src.orchestrator.decompose") as mock_decompose, \
+         patch("src.orchestrator.schedule") as mock_schedule, \
+         patch("src.orchestrator.execute_wave") as mock_execute, \
+         patch("src.orchestrator.generate_report") as mock_report, \
+         patch("src.orchestrator.save_report") as mock_save:
+
+        mock_decompose.return_value = tasks
+        mock_schedule.return_value = waves
+        mock_execute.side_effect = lambda w, d: w
+        mock_report.return_value = "# Report"
+        mock_save.return_value = str(tmp_path / "results" / "report.md")
+
+        orch = Orchestrator(config={"providers": {}, "models": {}})
+        out_dir = str(tmp_path / "output")
+        orch.run("test problem", output_dir=out_dir)
+
+        assert (tmp_path / "output" / "tasks").is_dir()
+        assert (tmp_path / "output" / "results").is_dir()
