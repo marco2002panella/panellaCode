@@ -7,7 +7,7 @@ from src.decomposer import decompose
 from src.scheduler import schedule
 from src.executor import execute_wave_parallel
 from src.collector import generate_report, save_report
-from src.monitor import Monitor
+from src.monitor import LiveMonitor
 
 
 class Orchestrator:
@@ -25,11 +25,11 @@ class Orchestrator:
         model_map = model_map or {}
         decomposer_model = model_map.get("decomposer", self.model_config.get("decomposer", "openai:gpt-4o-mini"))
         executor_model = model_map.get("executor_default", self.model_config.get("executor_default", "openai:gpt-4o-mini"))
+        repair_model = self.model_config.get("task_repair", executor_model)
 
         # Phase 1: Decompose
         print("[1/4] Decomposing problem...")
-        tasks = decompose(problem, self.client, decomposer_model)
-        print(f"      Found {len(tasks)} subtasks")
+        tasks = decompose(problem, self.client, decomposer_model, repair_model)
 
         # Override model assignment
         for task in tasks:
@@ -39,8 +39,6 @@ class Orchestrator:
         # Phase 2: Schedule
         print("[2/4] Scheduling tasks...")
         waves = schedule(tasks)
-        for w in waves:
-            print(f"      Wave {w.level}: {len(w.tasks)} tasks (parallel)")
 
         # Phase 3: Execute
         print("[3/4] Executing waves...")
@@ -49,16 +47,17 @@ class Orchestrator:
         os.makedirs(task_dir, exist_ok=True)
         os.makedirs(result_dir, exist_ok=True)
 
-        monitor = Monitor(waves)
+        monitor = LiveMonitor(waves)
+        monitor.start()
 
         for wave in waves:
-            print(f"\n  >>> Wave {wave.level}")
             for task in wave.tasks:
-                monitor.update_task(task.id, "running")
+                monitor.update(task.id, "running")
             execute_wave_parallel(wave, task_dir)
             for res in wave.task_results:
-                monitor.update_task(res["task_id"], res["status"])
-            print(monitor.render())
+                monitor.update(res["task_id"], res["status"])
+
+        monitor.stop()
 
         # Phase 4: Collect
         print("\n[4/4] Collecting results...")

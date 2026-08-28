@@ -11,9 +11,10 @@ providers:
     retry_count: 3
   regolo:
     api_key: "${REGOLO_API_KEY}"
-    base_url: ""
-    timeout: 60
-    retry_count: 3
+    base_url: "https://api.regolo.ai/v1"
+    timeout: 300
+    retry_count: 1
+    reasoning_effort: "low"
   opencode_zen:
     api_key: "${OPENCODE_ZEN_API_KEY}"
     base_url: ""
@@ -21,6 +22,7 @@ providers:
     retry_count: 3
 
 models:
-  decomposer: "openai:gpt-4o-mini"
-  scheduler: "openai:gpt-4o-mini"
-  executor_default: "openai:gpt-4o-mini"
+  decomposer: "regolo:qwen3.6-27b"
+  scheduler: "regolo:qwen3.6-27b"
+  executor_default: "regolo:qwen3-coder-next"
+  task_repair: "regolo:qwen3-coder-next"

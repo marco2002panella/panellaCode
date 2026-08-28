@@ -1,4 +1,5 @@
-from src.monitor import Monitor, MonitoredTask, TaskStatus
+import pytest
+from src.monitor import LiveMonitor, ICON, TaskStatus
 from src.models import Task, Wave
 
 
@@ -16,36 +17,23 @@ def _make_task(tid: str, description: str = None) -> Task:
 
 def test_monitor_init():
     waves = [Wave(level=0, tasks=[_make_task("t1"), _make_task("t2")], status="pending")]
-    monitor = Monitor(waves)
+    monitor = LiveMonitor(waves)
     assert len(monitor.waves) == 1
+    assert monitor._total == 2
 
 
 def test_monitor_update_task():
     waves = [Wave(level=0, tasks=[_make_task("t1")], status="pending")]
-    monitor = Monitor(waves)
-    monitor.update_task("t1", "running")
-    assert monitor.waves[0].tasks[0].status == "running"
+    monitor = LiveMonitor(waves)
+    monitor.update("t1", "running")
+    assert monitor._task_status["t1"] == "running"
 
 
 def test_monitor_update_unknown_task():
     waves = [Wave(level=0, tasks=[_make_task("t1")], status="pending")]
-    monitor = Monitor(waves)
-    monitor.update_task("nonexistent", "running")
-    assert monitor.waves[0].tasks[0].status == "pending"
-
-
-def test_monitor_get_task_status():
-    waves = [Wave(level=0, tasks=[_make_task("t1")], status="pending")]
-    monitor = Monitor(waves)
-    assert monitor.get_task_status("t1") == "pending"
-    monitor.update_task("t1", "running")
-    assert monitor.get_task_status("t1") == "running"
-
-
-def test_monitor_get_task_status_unknown():
-    waves = [Wave(level=0, tasks=[_make_task("t1")], status="pending")]
-    monitor = Monitor(waves)
-    assert monitor.get_task_status("unknown") is None
+    monitor = LiveMonitor(waves)
+    monitor.update("nonexistent", "running")
+    assert monitor._task_status["t1"] == "pending"
 
 
 def test_monitor_total_tasks():
@@ -53,57 +41,35 @@ def test_monitor_total_tasks():
         Wave(level=0, tasks=[_make_task("t1"), _make_task("t2")], status="pending"),
         Wave(level=1, tasks=[_make_task("t3")], status="pending"),
     ]
-    monitor = Monitor(waves)
-    assert monitor.total_tasks == 3
+    monitor = LiveMonitor(waves)
+    assert monitor._total == 3
 
 
-def test_monitor_completed_tasks():
+def test_monitor_count_completed():
     waves = [Wave(level=0, tasks=[_make_task("t1"), _make_task("t2")], status="pending")]
-    monitor = Monitor(waves)
-    assert monitor.completed_tasks == 0
-    monitor.update_task("t1", "completed")
-    assert monitor.completed_tasks == 1
+    monitor = LiveMonitor(waves)
+    completed = sum(1 for s in monitor._task_status.values() if s == "completed")
+    assert completed == 0
+    monitor.update("t1", "completed")
+    completed = sum(1 for s in monitor._task_status.values() if s == "completed")
+    assert completed == 1
 
 
-def test_monitor_failed_tasks():
+def test_monitor_count_failed():
     waves = [Wave(level=0, tasks=[_make_task("t1"), _make_task("t2")], status="pending")]
-    monitor = Monitor(waves)
-    assert monitor.failed_tasks == 0
-    monitor.update_task("t1", "failed")
-    assert monitor.failed_tasks == 1
+    monitor = LiveMonitor(waves)
+    failed = sum(1 for s in monitor._task_status.values() if s == "failed")
+    assert failed == 0
+    monitor.update("t1", "failed")
+    failed = sum(1 for s in monitor._task_status.values() if s == "failed")
+    assert failed == 1
 
 
-def test_monitor_render():
-    waves = [Wave(level=0, tasks=[_make_task("t1")], status="pending")]
-    monitor = Monitor(waves)
-    rendered = monitor.render()
-    assert "t1" in rendered
-    assert "Task t1" in rendered
-    assert "Progress:" in rendered
-
-
-def test_monitor_render_with_progress():
-    waves = [Wave(level=0, tasks=[_make_task("t1"), _make_task("t2")], status="pending")]
-    monitor = Monitor(waves)
-    monitor.update_task("t1", "completed")
-    monitor.update_task("t2", "failed")
-    rendered = monitor.render()
-    assert "1/2 completed" in rendered
-    assert "1 failed" in rendered
-
-
-def test_monitored_task_is_task_subclass():
-    mt = MonitoredTask(
-        id="t1",
-        description="Test",
-        context={},
-        conventions={},
-        dependencies=[],
-        level=0,
-        assigned_model="default",
-    )
-    assert isinstance(mt, Task)
-    assert mt.status == "pending"
+def test_icon_mapping():
+    assert ICON["pending"] == "⏳"
+    assert ICON["running"] == "🔄"
+    assert ICON["completed"] == "✅"
+    assert ICON["failed"] == "❌"
 
 
 def test_task_status_constants():
@@ -118,7 +84,7 @@ def test_monitor_multiple_waves():
         Wave(level=0, tasks=[_make_task("t1")], status="pending"),
         Wave(level=1, tasks=[_make_task("t2")], status="pending"),
     ]
-    monitor = Monitor(waves)
-    monitor.update_task("t2", "running")
-    assert monitor.waves[1].tasks[0].status == "running"
-    assert monitor.waves[0].tasks[0].status == "pending"
+    monitor = LiveMonitor(waves)
+    monitor.update("t2", "running")
+    assert monitor._task_status["t2"] == "running"
+    assert monitor._task_status["t1"] == "pending"

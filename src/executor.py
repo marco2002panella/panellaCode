@@ -1,10 +1,17 @@
 import os
 import subprocess
+import tempfile
 import yaml
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 
 from src.models import Task, Wave
+
+
+def to_opencode_model(model_spec: str) -> str:
+    provider, model = model_spec.split(":", 1)
+    provider_aliases = {"regolo": "regolo-ai"}
+    return f"{provider_aliases.get(provider, provider)}/{model}"
 
 
 def write_task_file(task: Task, output_dir: str) -> str:
@@ -52,18 +59,36 @@ def execute_task(task: Task, output_dir: str) -> Dict:
         "status": "pending",
         "error": None,
     }
-
     try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as pf:
+            pf.write(prompt)
+            prompt_file = pf.name
+
+        model = to_opencode_model(task.assigned_model)
+        cmd = [
+            "opencode",
+            "run",
+            "--model",
+            model,
+            "Complete the attached task and write the requested output.",
+            "--file",
+            prompt_file,
+        ]
         proc = subprocess.run(
-            ["opencode", "--model", task.assigned_model, prompt],
+            cmd,
             capture_output=True,
             text=True,
             timeout=300,
         )
-        if proc.returncode == 0:
+        os.unlink(prompt_file)
+
+        if proc.returncode == 0 and proc.stdout.strip():
             result["status"] = "completed"
             with open(result_path, "w") as f:
                 f.write(proc.stdout)
+        elif proc.returncode == 0:
+            result["status"] = "failed"
+            result["error"] = "opencode returned empty output"
         else:
             result["status"] = "failed"
             result["error"] = proc.stderr
@@ -101,7 +126,6 @@ def execute_wave_parallel(wave: Wave, output_dir: str) -> Wave:
 
     wave.status = "running"
     results = []
-
     with ThreadPoolExecutor(max_workers=len(wave.tasks)) as executor:
         future_to_task = {
             executor.submit(execute_task, task, output_dir): task

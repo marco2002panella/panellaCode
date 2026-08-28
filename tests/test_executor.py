@@ -5,7 +5,7 @@ import tempfile
 import yaml
 from unittest.mock import MagicMock, patch
 
-from src.executor import build_opencode_prompt, execute_task, execute_wave, write_task_file
+from src.executor import build_opencode_prompt, execute_task, execute_wave, to_opencode_model, write_task_file
 from src.models import Task, Wave
 
 
@@ -63,6 +63,14 @@ class TestBuildOpencodePrompt:
         assert "N/A" in prompt
 
 
+def test_to_opencode_model_maps_regolo_provider():
+    assert to_opencode_model("regolo:qwen3-coder-next") == "regolo-ai/qwen3-coder-next"
+
+
+def test_to_opencode_model_preserves_other_providers():
+    assert to_opencode_model("openai:gpt-4o-mini") == "openai/gpt-4o-mini"
+
+
 class TestExecuteTask:
 
     @patch("src.executor.subprocess.run")
@@ -77,7 +85,19 @@ class TestExecuteTask:
         mock_run.assert_called_once()
         call_args = mock_run.call_args[0][0]
         assert "opencode" in call_args
-        assert "openai:gpt-4o-mini" in call_args
+        assert "openai/gpt-4o-mini" in call_args
+        assert call_args[1] == "run"
+        assert "--file" in call_args
+        assert call_args.index("--file") > call_args.index("Complete the attached task and write the requested output.")
+
+    @patch("src.executor.subprocess.run")
+    def test_execute_task_rejects_empty_success_output(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        task = Task(id="t1", description="d")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = execute_task(task, tmpdir)
+        assert result["status"] == "failed"
+        assert "empty" in result["error"].lower()
 
     @patch("src.executor.subprocess.run")
     def test_execute_task_failure(self, mock_run):

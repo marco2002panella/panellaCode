@@ -21,6 +21,7 @@ class APIClient:
             "base_url": provider.get("base_url", ""),
             "timeout": provider.get("timeout", 60),
             "retry_count": provider.get("retry_count", 3),
+            "reasoning_effort": provider.get("reasoning_effort"),
         }, model_name
 
     def chat(self, model_spec: str, messages: List[Dict[str, str]]) -> str:
@@ -33,7 +34,10 @@ class APIClient:
         body = {
             "model": model_name,
             "messages": messages,
+            "max_tokens": 4096,
         }
+        if provider.get("reasoning_effort"):
+            body["reasoning_effort"] = provider["reasoning_effort"]
         max_retries = provider.get("retry_count", 3)
         last_error = None
         for attempt in range(max_retries):
@@ -42,7 +46,9 @@ class APIClient:
                     resp = client.post(url, json=body, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
-                    return data["choices"][0]["message"]["content"]
+                    msg = data["choices"][0]["message"]
+                    content = msg.get("content") or msg.get("reasoning_content", "")
+                    return content
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:

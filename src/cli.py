@@ -1,3 +1,4 @@
+import os
 import typer
 from typing import Optional
 from src.orchestrator import Orchestrator
@@ -13,6 +14,7 @@ def run(
     decomposer_model: Optional[str] = typer.Option(None, "--decomposer-model", help="Model for decomposition"),
     executor_model: Optional[str] = typer.Option(None, "--executor-model", help="Default model for execution"),
 ):
+
     model_map = {}
     if decomposer_model:
         model_map["decomposer"] = decomposer_model

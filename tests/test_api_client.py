@@ -75,6 +75,33 @@ def test_chat_success():
         assert call_kwargs[1]["json"]["messages"] == [{"role": "user", "content": "Hi"}]
 
 
+def test_chat_passes_reasoning_effort_when_configured():
+    client = APIClient(config={
+        "providers": {
+            "regolo": {
+                "api_key": "sk-test",
+                "base_url": "https://api.regolo.ai/v1",
+                "reasoning_effort": "low",
+            },
+        },
+    })
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "[]"}}]
+    }
+
+    with patch("src.api_client.httpx.Client") as mock_client:
+        mock_instance = MagicMock()
+        mock_instance.post.return_value = mock_response
+        mock_instance.__enter__ = MagicMock(return_value=mock_instance)
+        mock_instance.__exit__ = MagicMock(return_value=False)
+        mock_client.return_value = mock_instance
+
+        client.chat("regolo:qwen3.6-27b", [{"role": "user", "content": "Hi"}])
+        assert mock_instance.post.call_args[1]["json"]["reasoning_effort"] == "low"
+
+
 def test_chat_retry_on_failure():
     client = APIClient(config={
         "providers": {

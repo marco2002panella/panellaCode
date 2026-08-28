@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any, Dict
 import yaml
 from src.models import TaskTemplate
@@ -28,6 +29,9 @@ def load_config(path: str = "config/default.yaml") -> Dict[str, Any]:
 
 
 def load_template(path: str = "config/template.yaml") -> TaskTemplate:
-    with open(path, "r") as f:
+    template_path = Path(path)
+    if path == "config/template.yaml" and not template_path.exists():
+        template_path = Path(__file__).resolve().parent.parent / path
+    with open(template_path, "r") as f:
         raw = yaml.safe_load(f)
     return TaskTemplate(**raw)
