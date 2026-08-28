@@ -1,13 +1,13 @@
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from src.config import load_config
 from src.api_client import APIClient
 from src.decomposer import decompose
 from src.scheduler import schedule
-from src.executor import execute_wave
+from src.executor import execute_wave_parallel
 from src.collector import generate_report, save_report
-from src.models import Wave
+from src.monitor import Monitor
 
 
 class Orchestrator:
@@ -49,9 +49,16 @@ class Orchestrator:
         os.makedirs(task_dir, exist_ok=True)
         os.makedirs(result_dir, exist_ok=True)
 
+        monitor = Monitor(waves)
+
         for wave in waves:
-            print(f"\n  >>> Wave {wave.level} ({wave.status})")
-            execute_wave(wave, task_dir)
+            print(f"\n  >>> Wave {wave.level}")
+            for task in wave.tasks:
+                monitor.update_task(task.id, "running")
+            execute_wave_parallel(wave, task_dir)
+            for res in wave.task_results:
+                monitor.update_task(res["task_id"], res["status"])
+            print(monitor.render())
 
         # Phase 4: Collect
         print("\n[4/4] Collecting results...")

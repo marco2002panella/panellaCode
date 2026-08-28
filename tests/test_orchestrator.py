@@ -40,15 +40,19 @@ def test_orchestrator_run_full_flow(tmp_path):
         Wave(level=1, tasks=[tasks[1]], status="pending"),
     ]
 
+    def mock_execute_side_effect(w, d):
+        w.task_results = [{"task_id": t.id, "status": "completed"} for t in w.tasks]
+        return w
+
     with patch("src.orchestrator.decompose") as mock_decompose, \
          patch("src.orchestrator.schedule") as mock_schedule, \
-         patch("src.orchestrator.execute_wave") as mock_execute, \
+         patch("src.orchestrator.execute_wave_parallel") as mock_execute, \
          patch("src.orchestrator.generate_report") as mock_report, \
          patch("src.orchestrator.save_report") as mock_save:
 
         mock_decompose.return_value = tasks
         mock_schedule.return_value = waves
-        mock_execute.side_effect = lambda w, d: w
+        mock_execute.side_effect = mock_execute_side_effect
         mock_report.return_value = "# Report"
         mock_save.return_value = str(tmp_path / "report.md")
 
@@ -71,15 +75,19 @@ def test_orchestrator_run_with_model_map(tmp_path):
         Wave(level=0, tasks=tasks, status="pending"),
     ]
 
+    def mock_execute_side_effect(w, d):
+        w.task_results = [{"task_id": t.id, "status": "completed"} for t in w.tasks]
+        return w
+
     with patch("src.orchestrator.decompose") as mock_decompose, \
          patch("src.orchestrator.schedule") as mock_schedule, \
-         patch("src.orchestrator.execute_wave") as mock_execute, \
+         patch("src.orchestrator.execute_wave_parallel") as mock_execute, \
          patch("src.orchestrator.generate_report") as mock_report, \
          patch("src.orchestrator.save_report") as mock_save:
 
         mock_decompose.return_value = tasks
         mock_schedule.return_value = waves
-        mock_execute.side_effect = lambda w, d: w
+        mock_execute.side_effect = mock_execute_side_effect
         mock_report.return_value = "# Report"
         mock_save.return_value = str(tmp_path / "report.md")
 
@@ -102,15 +110,19 @@ def test_orchestrator_run_creates_output_dirs(tmp_path):
     tasks = [_make_task("t1")]
     waves = [Wave(level=0, tasks=tasks, status="pending")]
 
+    def mock_execute_side_effect(w, d):
+        w.task_results = [{"task_id": t.id, "status": "completed"} for t in w.tasks]
+        return w
+
     with patch("src.orchestrator.decompose") as mock_decompose, \
          patch("src.orchestrator.schedule") as mock_schedule, \
-         patch("src.orchestrator.execute_wave") as mock_execute, \
+         patch("src.orchestrator.execute_wave_parallel") as mock_execute, \
          patch("src.orchestrator.generate_report") as mock_report, \
          patch("src.orchestrator.save_report") as mock_save:
 
         mock_decompose.return_value = tasks
         mock_schedule.return_value = waves
-        mock_execute.side_effect = lambda w, d: w
+        mock_execute.side_effect = mock_execute_side_effect
         mock_report.return_value = "# Report"
         mock_save.return_value = str(tmp_path / "results" / "report.md")
 
