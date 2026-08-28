@@ -1,6 +1,7 @@
 import os
 import subprocess
 import yaml
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 
 from src.models import Task, Wave
@@ -87,6 +88,39 @@ def execute_wave(wave: Wave, output_dir: str) -> Wave:
         res = execute_task(task, output_dir)
         results.append(res)
         print(f"  {task.id}: {res['status']}")
+    wave.status = "completed" if all(r["status"] == "completed" for r in results) else "failed"
+    wave.task_results = results
+    return wave
+
+
+def execute_wave_parallel(wave: Wave, output_dir: str) -> Wave:
+    if not wave.tasks:
+        wave.status = "completed"
+        wave.task_results = []
+        return wave
+
+    wave.status = "running"
+    results = []
+
+    with ThreadPoolExecutor(max_workers=len(wave.tasks)) as executor:
+        future_to_task = {
+            executor.submit(execute_task, task, output_dir): task
+            for task in wave.tasks
+        }
+        for future in as_completed(future_to_task):
+            task = future_to_task[future]
+            try:
+                res = future.result()
+                results.append(res)
+                print(f"  {task.id}: {res['status']}")
+            except Exception as e:
+                results.append({
+                    "task_id": task.id,
+                    "status": "failed",
+                    "error": str(e),
+                })
+                print(f"  {task.id}: failed — {e}")
+
     wave.status = "completed" if all(r["status"] == "completed" for r in results) else "failed"
     wave.task_results = results
     return wave
