@@ -1,0 +1,26 @@
+providers:
+  openai:
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    timeout: 60
+    retry_count: 3
+  openrouter:
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    timeout: 60
+    retry_count: 3
+  regolo:
+    api_key: "${REGOLO_API_KEY}"
+    base_url: ""
+    timeout: 60
+    retry_count: 3
+  opencode_zen:
+    api_key: "${OPENCODE_ZEN_API_KEY}"
+    base_url: ""
+    timeout: 60
+    retry_count: 3
+
+models:
+  decomposer: "openai:gpt-4o-mini"
+  scheduler: "openai:gpt-4o-mini"
+  executor_default: "openai:gpt-4o-mini"
