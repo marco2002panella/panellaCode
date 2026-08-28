@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 
 from src.models import Task, Wave
-from src.manifest import manifest_context
+from src.manifest import ensure_manifest_header, manifest_context
 
 
 def to_opencode_model(model_spec: str) -> str:
@@ -90,6 +90,13 @@ def execute_task(task: Task, output_dir: str, manifest: Dict = None) -> Dict:
             result["status"] = "completed"
             with open(result_path, "w") as f:
                 f.write(proc.stdout)
+            if task.output_file:
+                output_file = os.path.abspath(task.output_file)
+                ensure_manifest_header(
+                    output_file,
+                    task.output_file,
+                    task.description,
+                )
         elif proc.returncode == 0:
             result["status"] = "failed"
             result["error"] = "opencode returned empty output"

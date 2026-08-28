@@ -7,6 +7,7 @@ from src.manifest import (
     manifest_context,
     save_manifest,
     update_execution_state,
+    ensure_manifest_header,
 )
 
 
@@ -63,3 +64,16 @@ def test_execution_state_updates_task_results(tmp_path):
     assert state["run_id"] == "run-1"
     assert state["tasks"]["task_001"]["status"] == "completed"
     assert (tmp_path / "execution-state.yaml").exists()
+
+
+def test_ensure_manifest_header_uses_language_comment_and_preserves_shebang(tmp_path):
+    source = tmp_path / "tool.py"
+    source.write_text("#!/usr/bin/env python3\nprint('ok')\n")
+
+    ensure_manifest_header(str(source), "tool.py", "Runs the tool")
+    ensure_manifest_header(str(source), "tool.py", "Runs the tool")
+
+    content = source.read_text()
+    assert content.startswith("#!/usr/bin/env python3\n# [manifest-gen]")
+    assert content.count("[manifest-gen]") == 1
+    assert "# purpose: Runs the tool" in content
