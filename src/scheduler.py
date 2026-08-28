@@ -1,5 +1,5 @@
 from typing import Dict, List
-from collections import defaultdict
+from collections import defaultdict, deque
 from src.models import Task, Wave
 
 
@@ -19,11 +19,11 @@ def topological_sort(tasks: List[Task]) -> List[str]:
             dependents[dep].append(t.id)
             in_degree[t.id] += 1
 
-    queue = [tid for tid, deg in in_degree.items() if deg == 0]
+    queue = deque(tid for tid, deg in in_degree.items() if deg == 0)
     result = []
 
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         result.append(node)
         for dependent in dependents[node]:
             in_degree[dependent] -= 1
@@ -41,6 +41,7 @@ def schedule(tasks: List[Task]) -> List[Wave]:
     if not tasks:
         return []
 
+    topological_sort(tasks)
     task_map = {t.id: t for t in tasks}
     levels: Dict[str, int] = {}
 
