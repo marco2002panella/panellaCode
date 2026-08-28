@@ -8,9 +8,16 @@ from src.config import load_template
 from src.models import Task, TaskTemplate
 
 
-def build_decomposer_prompt(problem: str, template: TaskTemplate) -> str:
+def build_decomposer_prompt(
+    problem: str,
+    template: TaskTemplate,
+    repository_context: str = None,
+) -> str:
     instructions = template.decomposer_instructions.strip()
-    return f"{instructions}\n\nProblem to decompose:\n{problem}"
+    prompt = f"{instructions}\n\nProblem to decompose:\n{problem}"
+    if repository_context:
+        prompt += f"\n\nRepository manifest:\n{repository_context}"
+    return prompt
 
 
 def _parse_yaml_safe(text: str) -> List[Task]:
@@ -183,9 +190,10 @@ def decompose(
     client: APIClient,
     model_spec: str,
     repair_model_spec: str = None,
+    repository_context: str = None,
 ) -> List[Task]:
     template = load_template()
-    prompt = build_decomposer_prompt(problem, template)
+    prompt = build_decomposer_prompt(problem, template, repository_context)
     messages = [
         {"role": "system", "content": "You are a task decomposition expert. Output valid YAML only."},
         {"role": "user", "content": prompt},

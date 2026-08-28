@@ -46,6 +46,9 @@ python main.py run "Build a REST API with FastAPI for a todo app"
 # Custom config and output directory
 python main.py run "Create a React dashboard" -c config/my.yaml -o my_output
 
+# Use a repository manifest for independent calls
+python main.py run "Create a graph project" --manifest /path/to/project
+
 # Override models
 python main.py run "Write unit tests" --decomposer-model "openai:gpt-4o" --executor-model "openai:gpt-4o-mini"
 
@@ -76,6 +79,15 @@ main.py (CLI entry)
 2. **Schedule** – Tasks are grouped into waves by dependency level; each wave runs in parallel.
 3. **Execute** – Each wave's tasks are dispatched concurrently to their assigned LLM. A TUI monitor tracks progress.
 4. **Collect** – Results are aggregated into a structured markdown report saved to the output directory.
+
+## Repository Context
+
+Each run can maintain two files in the working project directory:
+
+- `manifest.yaml` describes the repository tree, file roles, purposes, and dependencies.
+- `execution-state.yaml` records the problem, task statuses, result paths, and errors.
+
+The manifest is included in the decomposer and executor prompts as bounded context. It is metadata only: file contents are loaded only when a task explicitly references them. The scanner excludes `.git`, virtual environments, caches, and `output/`.
 
 ## Project Structure
 

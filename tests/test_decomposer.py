@@ -1,5 +1,6 @@
-from src.decomposer import parse_tasks
+from src.decomposer import build_decomposer_prompt, parse_tasks
 from src.decomposer import decompose
+from src.models import TaskTemplate
 from src.models import Task
 import pytest
 from unittest.mock import MagicMock
@@ -148,3 +149,14 @@ def test_decompose_repairs_invalid_plan_with_fallback_model():
     assert [task.id for task in tasks] == ["task_001"]
     assert client.chat.call_count == 2
     assert client.chat.call_args_list[1].args[0] == "regolo:qwen3-coder-next"
+
+
+def test_build_decomposer_prompt_includes_manifest_context():
+    template = TaskTemplate(decomposer_instructions="Output tasks")
+    prompt = build_decomposer_prompt(
+        "Build an app",
+        template,
+        "project:\n  language: Python\nfiles:\n- path: src/app.py",
+    )
+    assert "Repository manifest:" in prompt
+    assert "src/app.py" in prompt

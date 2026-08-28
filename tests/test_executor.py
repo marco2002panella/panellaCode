@@ -5,7 +5,14 @@ import tempfile
 import yaml
 from unittest.mock import MagicMock, patch
 
-from src.executor import build_opencode_prompt, execute_task, execute_wave, to_opencode_model, write_task_file
+from src.executor import (
+    build_opencode_prompt,
+    execute_task,
+    execute_wave,
+    execute_wave_parallel,
+    to_opencode_model,
+    write_task_file,
+)
 from src.models import Task, Wave
 
 
@@ -69,6 +76,14 @@ def test_to_opencode_model_maps_regolo_provider():
 
 def test_to_opencode_model_preserves_other_providers():
     assert to_opencode_model("openai:gpt-4o-mini") == "openai/gpt-4o-mini"
+
+
+def test_build_opencode_prompt_includes_manifest_context():
+    task = Task(id="t1", description="Build a parser", context={"output_file": "parser.py"})
+    manifest = {"files": [{"path": "parser.py", "purpose": "Parses input"}]}
+    prompt = build_opencode_prompt(task, manifest)
+    assert "Repository manifest:" in prompt
+    assert "parser.py" in prompt
 
 
 class TestExecuteTask:
@@ -154,3 +169,22 @@ class TestExecuteWave:
             result = execute_wave(wave, tmpdir)
         assert result.status == "completed"
         assert result.task_results == []
+
+
+class TestExecuteWaveParallel:
+
+    @patch("src.executor.execute_task")
+    def test_parallel_calls_state_callback_for_each_result(self, mock_execute):
+        mock_execute.side_effect = lambda task, output_dir: {
+            "task_id": task.id,
+            "status": "completed",
+            "error": None,
+        }
+        callback = MagicMock()
+        wave = Wave(level=0, tasks=[Task(id="t1", description="d")])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            execute_wave_parallel(wave, tmpdir, state_callback=callback)
+
+        callback.assert_called_once()
+        assert callback.call_args.args[0]["task_id"] == "t1"

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 
 from src.models import Task, Wave
+from src.manifest import manifest_context
 
 
 def to_opencode_model(model_spec: str) -> str:
@@ -30,8 +31,8 @@ def write_task_file(task: Task, output_dir: str) -> str:
     return path
 
 
-def build_opencode_prompt(task: Task) -> str:
-    return (
+def build_opencode_prompt(task: Task, manifest: Dict = None) -> str:
+    prompt = (
         f"You are given a task to complete.\n\n"
         f"Task ID: {task.id}\n"
         f"Description: {task.description}\n\n"
@@ -46,11 +47,14 @@ def build_opencode_prompt(task: Task) -> str:
         f"  Code split: {task.conventions.get('code_split', [])}\n\n"
         f"Complete this task and write your output to the specified file."
     )
+    if manifest:
+        prompt += f"\n\nRepository manifest:\n{manifest_context(manifest)}"
+    return prompt
 
 
-def execute_task(task: Task, output_dir: str) -> Dict:
+def execute_task(task: Task, output_dir: str, manifest: Dict = None) -> Dict:
     task_file = write_task_file(task, output_dir)
-    prompt = build_opencode_prompt(task)
+    prompt = build_opencode_prompt(task, manifest)
     result_path = os.path.join(output_dir, f"{task.id}_result.md")
     result = {
         "task_id": task.id,
@@ -118,7 +122,12 @@ def execute_wave(wave: Wave, output_dir: str) -> Wave:
     return wave
 
 
-def execute_wave_parallel(wave: Wave, output_dir: str) -> Wave:
+def execute_wave_parallel(
+    wave: Wave,
+    output_dir: str,
+    manifest: Dict = None,
+    state_callback=None,
+) -> Wave:
     if not wave.tasks:
         wave.status = "completed"
         wave.task_results = []
@@ -127,8 +136,13 @@ def execute_wave_parallel(wave: Wave, output_dir: str) -> Wave:
     wave.status = "running"
     results = []
     with ThreadPoolExecutor(max_workers=len(wave.tasks)) as executor:
+        submit = (
+            lambda task: executor.submit(execute_task, task, output_dir)
+            if manifest is None
+            else executor.submit(execute_task, task, output_dir, manifest)
+        )
         future_to_task = {
-            executor.submit(execute_task, task, output_dir): task
+            submit(task): task
             for task in wave.tasks
         }
         for future in as_completed(future_to_task):
@@ -136,6 +150,8 @@ def execute_wave_parallel(wave: Wave, output_dir: str) -> Wave:
             try:
                 res = future.result()
                 results.append(res)
+                if state_callback:
+                    state_callback(res)
                 print(f"  {task.id}: {res['status']}")
             except Exception as e:
                 results.append({
@@ -143,6 +159,8 @@ def execute_wave_parallel(wave: Wave, output_dir: str) -> Wave:
                     "status": "failed",
                     "error": str(e),
                 })
+                if state_callback:
+                    state_callback(results[-1])
                 print(f"  {task.id}: failed — {e}")
 
     wave.status = "completed" if all(r["status"] == "completed" for r in results) else "failed"
