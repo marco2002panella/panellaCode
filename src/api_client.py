@@ -6,8 +6,9 @@ import httpx
 
 
 class APIClient:
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], cost_tracker=None):
         self.providers = config.get("providers", {})
+        self.cost_tracker = cost_tracker
 
     def _resolve(self, model_spec: str) -> Tuple[Dict[str, Any], str]:
         provider_name, model_name = model_spec.split(":", 1)
@@ -24,7 +25,7 @@ class APIClient:
             "reasoning_effort": provider.get("reasoning_effort"),
         }, model_name
 
-    def chat(self, model_spec: str, messages: List[Dict[str, str]]) -> str:
+    def chat(self, model_spec: str, messages: List[Dict[str, str]], role: str = "llm") -> str:
         provider, model_name = self._resolve(model_spec)
         url = f"{provider['base_url']}/chat/completions"
         headers = {
@@ -46,6 +47,14 @@ class APIClient:
                     resp = client.post(url, json=body, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
+                    if self.cost_tracker:
+                        usage = data.get("usage", {})
+                        self.cost_tracker.record(
+                            role,
+                            model_spec,
+                            usage.get("prompt_tokens"),
+                            usage.get("completion_tokens"),
+                        )
                     msg = data["choices"][0]["message"]
                     content = msg.get("content") or msg.get("reasoning_content", "")
                     return content

@@ -26,3 +26,4 @@ models:
   scheduler: "regolo:qwen3.6-27b"
   executor_default: "regolo:qwen3-coder-next"
   task_repair: "regolo:qwen3-coder-next"
+  plan_validator: "regolo:qwen3-coder-next"

@@ -120,10 +120,8 @@ def execute_wave(wave: Wave, output_dir: str) -> Wave:
     wave.status = "running"
     results = []
     for task in wave.tasks:
-        print(f"  Executing {task.id} (model: {task.assigned_model})...")
         res = execute_task(task, output_dir)
         results.append(res)
-        print(f"  {task.id}: {res['status']}")
     wave.status = "completed" if all(r["status"] == "completed" for r in results) else "failed"
     wave.task_results = results
     return wave
@@ -159,7 +157,6 @@ def execute_wave_parallel(
                 results.append(res)
                 if state_callback:
                     state_callback(res)
-                print(f"  {task.id}: {res['status']}")
             except Exception as e:
                 results.append({
                     "task_id": task.id,
@@ -168,7 +165,6 @@ def execute_wave_parallel(
                 })
                 if state_callback:
                     state_callback(results[-1])
-                print(f"  {task.id}: failed — {e}")
 
     wave.status = "completed" if all(r["status"] == "completed" for r in results) else "failed"
     wave.task_results = results

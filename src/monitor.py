@@ -64,7 +64,7 @@ class LiveMonitor:
     def log_event(self, message: str):
         self.console.print(f"[dim]{message}[/dim]")
 
-    def stop(self):
+    def stop(self, cost_summary=None):
         self._progress.stop()
         table = Table(title="📊 Results")
         table.add_column("Task", style="cyan")
@@ -84,3 +84,10 @@ class LiveMonitor:
         failed = sum(1 for s in self._task_status.values() if s == "failed")
         self.console.print(table)
         self.console.print(f"\n✅ {completed}/{self._total} completed, ❌ {failed} failed\n")
+        if cost_summary:
+            cost = cost_summary["estimated_cost"]
+            cost_display = f"${cost:.6f}" if cost is not None else "unknown"
+            self.console.print(
+                f"Cost: {cost_display} | Calls: {cost_summary['calls']} | "
+                f"Tokens: {cost_summary['input_tokens']} in / {cost_summary['output_tokens']} out"
+            )

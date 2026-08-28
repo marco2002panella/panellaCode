@@ -89,6 +89,10 @@ Each run can maintain two files in the working project directory:
 
 The manifest is included in the decomposer and executor prompts as bounded context. It is metadata only: file contents are loaded only when a task explicitly references them. The scanner excludes `.git`, virtual environments, caches, and `output/`.
 
+Before scheduling, `opencode` always validates the generated plan against the original problem and manifest. An invalid or unparsable validation response stops the run before any task is dispatched.
+
+The execution UI shows token usage and estimated cost when provider pricing and usage metadata are available. Unknown costs are reported as `unknown` rather than guessed. Configure prices in `config/default.yaml` under `pricing` using input and output cost per million tokens.
+
 ## Project Structure
 
 ```

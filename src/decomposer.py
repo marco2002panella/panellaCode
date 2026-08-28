@@ -198,7 +198,7 @@ def decompose(
         {"role": "system", "content": "You are a task decomposition expert. Output valid YAML only."},
         {"role": "user", "content": prompt},
     ]
-    response = client.chat(model_spec, messages)
+    response = client.chat(model_spec, messages, role="decomposer")
     try:
         return parse_tasks(response)
     except ValueError as initial_error:
@@ -224,7 +224,7 @@ def decompose(
                 ),
             },
         ]
-        repaired_response = client.chat(repair_model_spec, repair_messages)
+        repaired_response = client.chat(repair_model_spec, repair_messages, role="repair")
         try:
             return parse_tasks(repaired_response)
         except ValueError as repair_error:

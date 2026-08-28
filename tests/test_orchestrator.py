@@ -132,3 +132,14 @@ def test_orchestrator_run_creates_output_dirs(tmp_path):
 
         assert (tmp_path / "output" / "tasks").is_dir()
         assert (tmp_path / "output" / "results").is_dir()
+
+
+def test_orchestrator_stops_before_scheduling_invalid_plan(tmp_path):
+    tasks = [_make_task("t1")]
+    with patch("src.orchestrator.decompose", return_value=tasks), \
+         patch("src.orchestrator.validate_plan", return_value={"valid": False, "issues": ["missing main"], "missing_tasks": []}), \
+         patch("src.orchestrator.schedule") as mock_schedule:
+        orch = Orchestrator(config={"providers": {}, "models": {}})
+        with pytest.raises(RuntimeError, match="missing main"):
+            orch.run("test problem", output_dir=str(tmp_path), manifest_root=str(tmp_path))
+        mock_schedule.assert_not_called()

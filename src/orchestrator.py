@@ -9,6 +9,8 @@ from src.scheduler import schedule
 from src.executor import execute_wave_parallel
 from src.collector import generate_report, save_report
 from src.monitor import LiveMonitor
+from src.plan_validator import validate_plan
+from src.costs import CostTracker
 from src.manifest import (
     build_manifest,
     create_execution_state,
@@ -22,7 +24,8 @@ from src.manifest import (
 class Orchestrator:
     def __init__(self, config: Optional[Dict[str, Any]] = None, config_path: str = "config/default.yaml"):
         self.config = config or load_config(config_path)
-        self.client = APIClient(self.config)
+        self.cost_tracker = CostTracker(self.config.get("pricing", {}))
+        self.client = APIClient(self.config, self.cost_tracker)
         self.model_config = self.config.get("models", {})
 
     def run(
@@ -36,6 +39,7 @@ class Orchestrator:
         decomposer_model = model_map.get("decomposer", self.model_config.get("decomposer", "openai:gpt-4o-mini"))
         executor_model = model_map.get("executor_default", self.model_config.get("executor_default", "openai:gpt-4o-mini"))
         repair_model = self.model_config.get("task_repair", executor_model)
+        validator_model = self.model_config.get("plan_validator", executor_model)
         manifest = None
         execution_state = None
         repository_root = os.path.abspath(manifest_root) if manifest_root else None
@@ -45,8 +49,6 @@ class Orchestrator:
                 repository_root, problem, uuid4().hex
             )
 
-        # Phase 1: Decompose
-        print("[1/4] Decomposing problem...")
         repository_context = manifest_context(manifest) if manifest else None
         tasks = decompose(
             problem,
@@ -56,17 +58,24 @@ class Orchestrator:
             repository_context,
         )
 
+        if repository_root:
+            validation = validate_plan(
+                problem,
+                [task.model_dump() for task in tasks],
+                repository_context or "files: []",
+                validator_model,
+            )
+            if not validation["valid"]:
+                issues = "; ".join(str(issue) for issue in validation["issues"])
+                raise RuntimeError(f"Plan validation failed: {issues}")
+
         # Override model assignment
         for task in tasks:
             if task.assigned_model == "default":
                 task.assigned_model = executor_model
 
-        # Phase 2: Schedule
-        print("[2/4] Scheduling tasks...")
         waves = schedule(tasks)
 
-        # Phase 3: Execute
-        print("[3/4] Executing waves...")
         task_dir = os.path.join(output_dir, "tasks")
         result_dir = os.path.join(output_dir, "results")
         os.makedirs(task_dir, exist_ok=True)
@@ -95,13 +104,10 @@ class Orchestrator:
             for res in wave.task_results:
                 monitor.update(res["task_id"], res["status"])
 
-        monitor.stop()
+        monitor.stop(self.cost_tracker.summary())
 
-        # Phase 4: Collect
-        print("\n[4/4] Collecting results...")
         report = generate_report(waves)
         report_path = save_report(report, result_dir)
-        print(f"      Report saved to {report_path}")
 
         if repository_root:
             save_manifest(repository_root, build_manifest(repository_root))
