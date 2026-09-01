@@ -39,3 +39,11 @@ def test_execute_wave_v2_parallel():
         assert result_wave.status in ("completed", "failed")
     finally:
         shutil.rmtree(outdir)
+
+def test_build_executor_prompt_includes_validation_requirements():
+    from src.executor_v2 import build_executor_prompt
+    task = Task(id="t9", description="Add feature", context={"output_file": "feat.py"}, conventions={})
+    prompt = build_executor_prompt(task)
+    assert "VALIDATION REQUIREMENTS" in prompt
+    assert "VALIDATION:" in prompt
+    assert "python -m py_compile" in prompt

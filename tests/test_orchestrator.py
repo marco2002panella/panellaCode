@@ -40,7 +40,7 @@ def test_orchestrator_run_full_flow(tmp_path):
         Wave(level=1, tasks=[tasks[1]], status="pending"),
     ]
 
-    def mock_execute_v2_side_effect(w, d, m, c):
+    def mock_execute_v2_side_effect(w, d, m, c, r=None):
         w.task_results = [{"task_id": t.id, "status": "completed"} for t in w.tasks]
         return w
 
@@ -145,3 +145,16 @@ def test_orchestrator_stops_before_scheduling_invalid_plan(tmp_path):
         with pytest.raises(RuntimeError, match="missing main"):
             orch.run("test problem", output_dir=str(tmp_path), manifest_root=str(tmp_path))
         mock_schedule.assert_not_called()
+
+
+def test_assign_default_models_sets_executor_model():
+    from src.models import Task
+    from src.zen_router import ZenRouter
+    orch = Orchestrator(config={
+        "pricing": {}, "providers": {}, "models": {"executor_default": "opencode_zen:big-pickle"},
+        "zen_free_models": ["opencode_zen:big-pickle"],
+        "regolo_fallback_models": [],
+    })
+    tasks = [Task(id="t1", description="a", assigned_model="default")]
+    orch._assign_default_models(tasks, "opencode_zen:big-pickle")
+    assert tasks[0].assigned_model == "opencode_zen:big-pickle"

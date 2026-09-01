@@ -37,6 +37,7 @@ class InteractiveSession:
         tasks = self.orchestrator._decompose_with_repair(self.problem, self.manifest_root)
         
         print("📋 Scheduling tasks...")
+        self.orchestrator._assign_default_models(tasks)
         waves = self.orchestrator._schedule_tasks(tasks)
         
         monitor = LiveMonitorV2(waves, verbose=True)

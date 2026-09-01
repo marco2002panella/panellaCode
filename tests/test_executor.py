@@ -188,3 +188,16 @@ class TestExecuteWaveParallel:
 
         callback.assert_called_once()
         assert callback.call_args.args[0]["task_id"] == "t1"
+
+
+def test_build_opencode_prompt_includes_validation_requirements():
+    task = Task(id="t1", description="Build a parser", context={"output_file": "parser.py"})
+    prompt = build_opencode_prompt(task)
+    assert "VALIDATION REQUIREMENTS" in prompt
+    assert "read" in prompt
+    assert "bash" in prompt
+    assert "VALIDATION:" in prompt
+
+
+def test_to_opencode_model_zen_free_strips_provider():
+    assert to_opencode_model("opencode_zen:big-pickle") == "big-pickle"

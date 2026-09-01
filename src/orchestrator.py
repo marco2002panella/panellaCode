@@ -29,8 +29,14 @@ class Orchestrator:
     def __init__(self, config: Optional[Dict[str, Any]] = None, config_path: str = "config/default.yaml"):
         self.config = config or load_config(config_path)
         self.cost_tracker = CostTracker(self.config.get("pricing", {}))
-        self.client = APIClient(self.config, self.cost_tracker)
         self.model_config = self.config.get("models", {})
+        from src.zen_router import ZenRouter
+        self.router = ZenRouter(
+            zen_free_models=self.config.get("zen_free_models"),
+            regolo_fallback_models=self.config.get("regolo_fallback_models"),
+            executor_default=self.model_config.get("executor_default"),
+        )
+        self.client = APIClient(self.config, self.cost_tracker, router=self.router)
 
     def run(
         self,
@@ -43,8 +49,8 @@ class Orchestrator:
         resume: bool = False,
     ) -> str:
         model_map = model_map or {}
-        decomposer_model = model_map.get("decomposer", self.model_config.get("decomposer", "openai:gpt-4o-mini"))
-        executor_model = model_map.get("executor_default", self.model_config.get("executor_default", "openai:gpt-4o-mini"))
+        decomposer_model = model_map.get("decomposer", self.model_config.get("decomposer", "opencode_zen:big-pickle"))
+        executor_model = model_map.get("executor_default", self.model_config.get("executor_default", "opencode_zen:big-pickle"))
         repair_model = self.model_config.get("task_repair", executor_model)
         validator_model = self.model_config.get("plan_validator", executor_model)
         manifest = None
@@ -112,9 +118,7 @@ class Orchestrator:
                             if task:
                                 task.status = task_data.get("status", "pending")
 
-        for task in tasks:
-            if task.assigned_model == "default":
-                task.assigned_model = executor_model
+        self._assign_default_models(tasks, executor_model)
 
         if repository_root and not resume:
             monitor = LiveMonitorV2(waves, verbose=verbose)
@@ -166,10 +170,11 @@ class Orchestrator:
                 state_callback = lambda result: update_execution_state(
                     repository_root, execution_state, result
                 )
-            if manifest is None and state_callback is None:
-                execute_wave_v2(wave, task_dir, None, checkpointer if not resume else None)
-            else:
-                execute_wave_v2(wave, task_dir, manifest, checkpointer if not resume else None)
+            execute_wave_v2(
+                wave, task_dir, manifest,
+                checkpointer if not resume else None,
+                self.router,
+            )
             for res in wave.task_results:
                 monitor.update(res["task_id"], res["status"])
 
@@ -200,13 +205,10 @@ class Orchestrator:
             console.print(console.render_str(f"[bold red]Plan validation failed:\n{validation['issues']}[/bold red]"))
     def _decompose_with_repair(self, problem: str, manifest_root: str = None):
         from src.decomposer import decompose
-        from src.config import load_config
         from src.manifest import load_or_create_manifest, manifest_context
         
-        config = load_config()
-        model_config = config.get("models", {})
-        decomposer_model = model_config.get("decomposer", "openai:gpt-4o-mini")
-        repair_model = model_config.get("task_repair", model_config.get("executor_default", "openai:gpt-4o-mini"))
+        decomposer_model = self.model_config.get("decomposer", "opencode_zen:big-pickle")
+        repair_model = self.model_config.get("task_repair", self.model_config.get("executor_default", "opencode_zen:big-pickle"))
         
         repository_context = None
         if manifest_root:
@@ -221,6 +223,12 @@ class Orchestrator:
             repository_context,
         )
 
+    def _assign_default_models(self, tasks, executor_model: str = None):
+        executor_model = executor_model or self.router.next_for_role("executor_default")
+        for task in tasks:
+            if task.assigned_model == "default":
+                task.assigned_model = executor_model
+
     def _schedule_tasks(self, tasks):
         from src.scheduler import schedule
         return schedule(tasks)
@@ -231,7 +239,7 @@ class Orchestrator:
         
         checkpoint_dir = f"{task_dir}/checkpoints"
         checkpointer = Checkpointer(checkpoint_dir)
-        execute_wave_v2(wave, task_dir, manifest, checkpointer)
+        execute_wave_v2(wave, task_dir, manifest, checkpointer, self.router)
 
     def _generate_report(self, waves):
         from src.collector import generate_report

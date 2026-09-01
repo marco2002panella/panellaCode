@@ -151,3 +151,41 @@ def test_chat_raises_after_max_retries():
             except RuntimeError as e:
                 assert "2 retries" in str(e)
                 assert mock_instance.post.call_count == 2
+
+
+def test_chat_falls_back_on_rate_limit():
+    from src.zen_router import ZenRouter
+    client = APIClient(config={
+        "providers": {
+            "opencode_zen": {"api_key": "sk-test", "base_url": "https://opencode.ai/zen/v1", "retry_count": 4},
+        },
+    }, router=ZenRouter(
+        zen_free_models=["opencode_zen:big-pickle", "opencode_zen:nemotron-3-ultra-free"],
+    ))
+
+    def fake_post(url, json, headers):
+        if json["model"] == "big-pickle":
+            mock = MagicMock()
+            mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "429 Free usage exceeded", request=httpx.Request("POST", url),
+                response=httpx.Response(429, request=httpx.Request("POST", url)),
+            )
+            return mock
+        mock = MagicMock()
+        mock.raise_for_status = MagicMock(return_value=None)
+        mock.json = MagicMock(return_value={
+            "choices": [{"message": {"content": "OK from fallback"}}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+        })
+        return mock
+
+    with patch("src.api_client.httpx.Client") as mock_client:
+        mock_instance = MagicMock()
+        mock_instance.post.side_effect = fake_post
+        mock_instance.__enter__ = MagicMock(return_value=mock_instance)
+        mock_instance.__exit__ = MagicMock(return_value=False)
+        mock_client.return_value = mock_instance
+
+        with patch("src.api_client.time.sleep"):
+            result = client.chat("opencode_zen:big-pickle", [{"role": "user", "content": "Hi"}])
+            assert result == "OK from fallback"

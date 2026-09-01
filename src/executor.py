@@ -10,9 +10,8 @@ from src.manifest import ensure_manifest_header, manifest_context
 
 
 def to_opencode_model(model_spec: str) -> str:
-    provider, model = model_spec.split(":", 1)
-    provider_aliases = {"regolo": "regolo-ai"}
-    return f"{provider_aliases.get(provider, provider)}/{model}"
+    from src.zen_router import to_opencode_model as _map
+    return _map(model_spec)
 
 
 def write_task_file(task: Task, output_dir: str) -> str:
@@ -45,7 +44,15 @@ def build_opencode_prompt(task: Task, manifest: Dict = None) -> str:
         f"  Language: {task.conventions.get('language', 'N/A')}\n"
         f"  Style: {task.conventions.get('style', 'N/A')}\n"
         f"  Code split: {task.conventions.get('code_split', [])}\n\n"
-        f"Complete this task and write your output to the specified file."
+        f"Complete this task and write your output to the specified file.\n\n"
+        f"VALIDATION REQUIREMENTS — PRIMA di dichiarare la task completata, DEVI:\n"
+        f"1. Usare lo strumento `read` o `glob` per verificare che l'output file esista;\n"
+        f"2. Usare `bash` per eseguire un check di sintassi/compilazione del file generato\n"
+        f"   (es. `python -m py_compile <file>`, o il linter/test pertinente al language/stack);\n"
+        f"3. Se la task lo richiede, eseguire i test (es. pytest) tramite `bash`;\n"
+        f"4. Aggiungere al tuo output una sezione finale \"VALIDATION:\" che riporti i passi\n"
+        f"   eseguiti e l'esito (PASS/FAIL) di ciascuno.\n"
+        f"Non completare la task se la validazione fallisce: correggi il file e ricontrolla.\n"
     )
     if manifest:
         prompt += f"\n\nRepository manifest:\n{manifest_context(manifest)}"

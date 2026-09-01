@@ -17,22 +17,61 @@ providers:
     reasoning_effort: "low"
   opencode_zen:
     api_key: "${OPENCODE_ZEN_API_KEY}"
-    base_url: ""
+    base_url: "https://opencode.ai/zen/v1"
     timeout: 60
     retry_count: 3
 
+# Modelli gratuiti di OpenCode Zen, in ordine di priorita' per default/fallback.
+# NOTA: tutti i modelli free hanno rate-limit per IP, dinamico e giornaliero.
+# Quando uno satura (429 / FreeUsageLimitError), il router passa al successivo.
+zen_free_models:
+  - "opencode_zen:big-pickle"
+  - "opencode_zen:nemotron-3-ultra-free"
+  - "opencode_zen:nemotron-3.5-lightning-free"
+  - "opencode_zen:ling-3.0-flash-fin-free"
+  - "opencode_zen:mimo-v2.5-free"
+
+# Fallback esplicito a Regolo, usato SOLO quando tutti i modelli free sono saturi.
+# In ordine di priorita'. escludiamo glm5.2 (congestionato) e bricks/router.
+regolo_fallback_models:
+  - "regolo:qwen3.8-27b"
+  - "regolo:qwen3-coder-next"
+  - "regolo:gpt-oss-120b"
+  - "regolo:gpt-oss-20b"
+
 models:
-  decomposer: "regolo:qwen3.6-27b"
-  scheduler: "regolo:qwen3.6-27b"
-  executor_default: "regolo:qwen3-coder-next"
-  task_repair: "regolo:qwen3-coder-next"
-  plan_validator: "regolo:qwen3-coder-next"
+  decomposer: "opencode_zen:big-pickle"
+  scheduler: "opencode_zen:big-pickle"
+  executor_default: "opencode_zen:big-pickle"
+  task_repair: "opencode_zen:big-pickle"
+  plan_validator: "opencode_zen:big-pickle"
 
 pricing:
-  regolo:qwen3.6-27b:
+  opencode_zen:big-pickle:
+    input: 0.0
+    output: 0.0
+  opencode_zen:nemotron-3-ultra-free:
+    input: 0.0
+    output: 0.0
+  opencode_zen:nemotron-3.5-lightning-free:
+    input: 0.0
+    output: 0.0
+  opencode_zen:ling-3.0-flash-fin-free:
+    input: 0.0
+    output: 0.0
+  opencode_zen:mimo-v2.5-free:
+    input: 0.0
+    output: 0.0
+  regolo:qwen3.8-27b:
     input: 0.0
     output: 0.0
   regolo:qwen3-coder-next:
+    input: 0.0
+    output: 0.0
+  regolo:gpt-oss-120b:
+    input: 0.0
+    output: 0.0
+  regolo:gpt-oss-20b:
     input: 0.0
     output: 0.0
   openai:gpt-4o-mini:

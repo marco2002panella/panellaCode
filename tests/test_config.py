@@ -6,8 +6,11 @@ def test_load_default_config():
     assert "providers" in cfg
     assert "openai" in cfg["providers"]
     assert "models" in cfg
-    assert cfg["models"]["decomposer"] == "regolo:qwen3.6-27b"
-    assert cfg["models"]["task_repair"] == "regolo:qwen3-coder-next"
+    assert cfg["models"]["decomposer"] == "opencode_zen:big-pickle"
+    assert cfg["models"]["task_repair"] == "opencode_zen:big-pickle"
+    assert cfg["providers"]["opencode_zen"]["base_url"] == "https://opencode.ai/zen/v1"
+    assert len(cfg["zen_free_models"]) >= 1
+    assert len(cfg["regolo_fallback_models"]) >= 1
 
 
 def test_load_template():

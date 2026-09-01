@@ -6,9 +6,14 @@ import httpx
 
 
 class APIClient:
-    def __init__(self, config: Dict[str, Any], cost_tracker=None):
+    def __init__(self, config: Dict[str, Any], cost_tracker=None, router=None):
         self.providers = config.get("providers", {})
         self.cost_tracker = cost_tracker
+        from src.zen_router import ZenRouter
+        self.router = router or ZenRouter(
+            zen_free_models=config.get("zen_free_models"),
+            regolo_fallback_models=config.get("regolo_fallback_models"),
+        )
 
     def _resolve(self, model_spec: str) -> Tuple[Dict[str, Any], str]:
         provider_name, model_name = model_spec.split(":", 1)
@@ -32,34 +37,53 @@ class APIClient:
             "Authorization": f"Bearer {provider['api_key']}",
             "Content-Type": "application/json",
         }
-        body = {
-            "model": model_name,
-            "messages": messages,
-            "max_tokens": 4096,
-        }
-        if provider.get("reasoning_effort"):
-            body["reasoning_effort"] = provider["reasoning_effort"]
         max_retries = provider.get("retry_count", 3)
         last_error = None
         for attempt in range(max_retries):
             try:
-                with httpx.Client(timeout=provider.get("timeout", 60)) as client:
-                    resp = client.post(url, json=body, headers=headers)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    if self.cost_tracker:
-                        usage = data.get("usage", {})
-                        self.cost_tracker.record(
-                            role,
-                            model_spec,
-                            usage.get("prompt_tokens"),
-                            usage.get("completion_tokens"),
-                        )
-                    msg = data["choices"][0]["message"]
-                    content = msg.get("content") or msg.get("reasoning_content", "")
-                    return content
+                body = {
+                    "model": model_name,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                }
+                if provider.get("reasoning_effort"):
+                    body["reasoning_effort"] = provider["reasoning_effort"]
+                return self._do_chat(
+                    url, headers, body, model_spec, role,
+                    provider.get("timeout", 60),
+                )
             except Exception as e:
                 last_error = e
+                if self.router and self.router.is_rate_limit(str(e)):
+                    self.router.register_failure(model_spec)
+                    fallback = self.router.next_fallback(model_spec)
+                    if fallback:
+                        model_spec = fallback
+                        provider, model_name = self._resolve(model_spec)
+                        url = f"{provider['base_url']}/chat/completions"
+                        headers = {
+                            "Authorization": f"Bearer {provider['api_key']}",
+                            "Content-Type": "application/json",
+                        }
+                        last_error = None
+                        continue
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
         raise RuntimeError(f"API call failed after {max_retries} retries: {last_error}")
+
+    def _do_chat(self, url, headers, body, model_spec, role, timeout=60) -> str:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=body, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            if self.cost_tracker:
+                usage = data.get("usage", {})
+                self.cost_tracker.record(
+                    role,
+                    model_spec,
+                    usage.get("prompt_tokens"),
+                    usage.get("completion_tokens"),
+                )
+            msg = data["choices"][0]["message"]
+            content = msg.get("content") or msg.get("reasoning_content", "")
+            return content
