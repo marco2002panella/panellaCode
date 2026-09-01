@@ -40,19 +40,21 @@ def test_orchestrator_run_full_flow(tmp_path):
         Wave(level=1, tasks=[tasks[1]], status="pending"),
     ]
 
-    def mock_execute_side_effect(w, d):
+    def mock_execute_v2_side_effect(w, d, m, c):
         w.task_results = [{"task_id": t.id, "status": "completed"} for t in w.tasks]
         return w
 
     with patch("src.orchestrator.decompose") as mock_decompose, \
          patch("src.orchestrator.schedule") as mock_schedule, \
-         patch("src.orchestrator.execute_wave_parallel") as mock_execute, \
+         patch("src.orchestrator.execute_wave_v2") as mock_execute, \
          patch("src.orchestrator.generate_report") as mock_report, \
-         patch("src.orchestrator.save_report") as mock_save:
+         patch("src.orchestrator.save_report") as mock_save, \
+         patch("src.orchestrator.validate_plan") as mock_validate:
 
         mock_decompose.return_value = tasks
         mock_schedule.return_value = waves
-        mock_execute.side_effect = mock_execute_side_effect
+        mock_execute.side_effect = mock_execute_v2_side_effect
+        mock_validate.return_value = {"valid": True, "issues": [], "missing_tasks": []}
         mock_report.return_value = "# Report"
         mock_save.return_value = str(tmp_path / "report.md")
 
@@ -137,7 +139,7 @@ def test_orchestrator_run_creates_output_dirs(tmp_path):
 def test_orchestrator_stops_before_scheduling_invalid_plan(tmp_path):
     tasks = [_make_task("t1")]
     with patch("src.orchestrator.decompose", return_value=tasks), \
-         patch("src.orchestrator.validate_plan", return_value={"valid": False, "issues": ["missing main"], "missing_tasks": []}), \
+         patch("src.orchestrator.validate_plan_v2", return_value={"valid": False, "issues": ["missing main"], "missing_tasks": []}), \
          patch("src.orchestrator.schedule") as mock_schedule:
         orch = Orchestrator(config={"providers": {}, "models": {}})
         with pytest.raises(RuntimeError, match="missing main"):

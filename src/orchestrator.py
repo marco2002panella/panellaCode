@@ -1,15 +1,18 @@
 import os
 from uuid import uuid4
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from src.config import load_config
 from src.api_client import APIClient
 from src.decomposer import decompose
 from src.scheduler import schedule
 from src.executor import execute_wave_parallel
+from src.executor_v2 import execute_wave_v2
 from src.collector import generate_report, save_report
 from src.monitor import LiveMonitor
+from src.monitor_v2 import LiveMonitorV2
 from src.plan_validator import validate_plan
+from src.validator_v2 import validate_plan_v2
 from src.costs import CostTracker
 from src.manifest import (
     build_manifest,
@@ -19,6 +22,7 @@ from src.manifest import (
     save_manifest,
     update_execution_state,
 )
+from src.checkpointing import Checkpointer
 
 
 class Orchestrator:
@@ -34,6 +38,9 @@ class Orchestrator:
         output_dir: str = "output",
         model_map: Optional[Dict[str, str]] = None,
         manifest_root: Optional[str] = None,
+        verbose: bool = False,
+        dry_run: bool = False,
+        resume: bool = False,
     ) -> str:
         model_map = model_map or {}
         decomposer_model = model_map.get("decomposer", self.model_config.get("decomposer", "openai:gpt-4o-mini"))
@@ -50,6 +57,26 @@ class Orchestrator:
             )
 
         repository_context = manifest_context(manifest) if manifest else None
+
+        if dry_run:
+            tasks = decompose(
+                problem,
+                self.client,
+                decomposer_model,
+                repair_model,
+                repository_context,
+            )
+            if repository_root:
+                validation = validate_plan_v2(
+                    problem,
+                    [task.model_dump() for task in tasks],
+                    repository_context or "files: []",
+                    validator_model,
+                )
+                self._print_validation(validation)
+            self._print_tasks(tasks)
+            return ""
+
         tasks = decompose(
             problem,
             self.client,
@@ -59,7 +86,7 @@ class Orchestrator:
         )
 
         if repository_root:
-            validation = validate_plan(
+            validation = validate_plan_v2(
                 problem,
                 [task.model_dump() for task in tasks],
                 repository_context or "files: []",
@@ -69,38 +96,80 @@ class Orchestrator:
                 issues = "; ".join(str(issue) for issue in validation["issues"])
                 raise RuntimeError(f"Plan validation failed: {issues}")
 
-        # Override model assignment
+        waves = schedule(tasks)
+
+        if resume:
+            checkpoint_dir = os.path.join(output_dir, "checkpoints")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpointer = Checkpointer(checkpoint_dir)
+            checkpoint_state = checkpointer.load_state()
+            if checkpoint_state and checkpoint_state.get("waves"):
+                for wave_idx, wave_data in enumerate(checkpoint_state["waves"]):
+                    if wave_idx < len(waves):
+                        waves[wave_idx].status = wave_data.get("status", "pending")
+                        for task_data in wave_data.get("tasks", []):
+                            task = next((t for t in waves[wave_idx].tasks if t.id == task_data["id"]), None)
+                            if task:
+                                task.status = task_data.get("status", "pending")
+
         for task in tasks:
             if task.assigned_model == "default":
                 task.assigned_model = executor_model
 
-        waves = schedule(tasks)
+        if repository_root and not resume:
+            monitor = LiveMonitorV2(waves, verbose=verbose)
+            monitor.start_validation()
+            validation = validate_plan_v2(
+                problem,
+                [task.model_dump() for task in tasks],
+                repository_context or "files: []",
+                validator_model,
+            )
+            monitor.end_validation(validation["valid"])
+            if not validation["valid"]:
+                issues = "; ".join(str(issue) for issue in validation["issues"])
+                raise RuntimeError(f"Plan validation failed: {issues}")
+        else:
+            if repository_root:
+                validation = validate_plan(
+                    problem,
+                    [task.model_dump() for task in tasks],
+                    repository_context or "files: []",
+                    validator_model,
+                )
+                if not validation["valid"]:
+                    issues = "; ".join(str(issue) for issue in validation["issues"])
+                    raise RuntimeError(f"Plan validation failed: {issues}")
 
         task_dir = os.path.join(output_dir, "tasks")
         result_dir = os.path.join(output_dir, "results")
         os.makedirs(task_dir, exist_ok=True)
         os.makedirs(result_dir, exist_ok=True)
 
-        monitor = LiveMonitor(waves)
+        if resume:
+            checkpoint_dir = os.path.join(output_dir, "checkpoints")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpointer = Checkpointer(checkpoint_dir)
+        else:
+            checkpoint_dir = os.path.join(output_dir, "checkpoints")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpointer = Checkpointer(checkpoint_dir)
+            checkpointer.save_state(waves)
+
+        monitor = LiveMonitorV2(waves, verbose=verbose)
         monitor.start()
 
         for wave in waves:
-            for task in wave.tasks:
-                monitor.update(task.id, "running")
+            monitor.start_wave(wave)
             state_callback = None
             if repository_root and execution_state is not None:
                 state_callback = lambda result: update_execution_state(
                     repository_root, execution_state, result
                 )
             if manifest is None and state_callback is None:
-                execute_wave_parallel(wave, task_dir)
+                execute_wave_v2(wave, task_dir, None, checkpointer if not resume else None)
             else:
-                execute_wave_parallel(
-                    wave,
-                    task_dir,
-                    manifest=manifest,
-                    state_callback=state_callback,
-                )
+                execute_wave_v2(wave, task_dir, manifest, checkpointer if not resume else None)
             for res in wave.task_results:
                 monitor.update(res["task_id"], res["status"])
 
@@ -112,4 +181,20 @@ class Orchestrator:
         if repository_root:
             save_manifest(repository_root, build_manifest(repository_root))
 
+        if not resume:
+            checkpointer.cleanup()
+
         return report
+
+    def _print_tasks(self, tasks: List):
+        console = __import__("rich").console.Console()
+        console.print(f"Tasks ({len(tasks)}):")
+        for task in tasks:
+            console.print(f"  - {task.id}: {task.description[:60]}...")
+
+    def _print_validation(self, validation: Dict):
+        console = __import__("rich").console.Console()
+        if validation["valid"]:
+            console.print(console.render_str("[bold green]Plan validation passed[/bold green]"))
+        else:
+            console.print(console.render_str(f"[bold red]Plan validation failed:\n{validation['issues']}[/bold red]"))
