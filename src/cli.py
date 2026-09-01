@@ -2,6 +2,7 @@ import os
 import typer
 from typing import Optional
 from src.orchestrator import Orchestrator
+from src.interactive_session import InteractiveSession
 
 app = typer.Typer()
 
@@ -36,6 +37,24 @@ def run(
         resume=resume,
     )
     typer.echo("\n" + report)
+
+
+@app.command()
+def interactive(
+    problem: str = typer.Argument(..., help="The problem to solve"),
+    config: str = typer.Option("config/default.yaml", "--config", "-c", help="Config file path"),
+    output: str = typer.Option("output", "--output", "-o", help="Output directory"),
+    manifest: str = typer.Option(".", "--manifest", help="Project root for manifest files"),
+):
+    """Run in interactive TUI mode with real-time monitoring and control."""
+    orch = Orchestrator(config_path=config)
+    session = InteractiveSession(orch, problem, output)
+    
+    try:
+        report = session.run()
+        typer.echo("\n" + report)
+    except KeyboardInterrupt:
+        typer.echo("\n⚠️  Session cancelled by user.")
 
 
 @app.command()

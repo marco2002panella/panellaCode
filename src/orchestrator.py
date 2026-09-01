@@ -198,3 +198,36 @@ class Orchestrator:
             console.print(console.render_str("[bold green]Plan validation passed[/bold green]"))
         else:
             console.print(console.render_str(f"[bold red]Plan validation failed:\n{validation['issues']}[/bold red]"))
+    def _decompose_with_repair(self, problem: str, repository_context: str = None):
+        from src.decomposer import decompose
+        from src.api_client import APIClient
+        from src.config import load_config
+        
+        config = load_config()
+        model_config = config.get("models", {})
+        decomposer_model = model_config.get("decomposer", "openai:gpt-4o-mini")
+        repair_model = model_config.get("task_repair", model_config.get("executor_default", "openai:gpt-4o-mini"))
+        
+        return decompose(
+            problem,
+            self.client,
+            decomposer_model,
+            repair_model,
+            repository_context,
+        )
+
+    def _schedule_tasks(self, tasks):
+        from src.scheduler import schedule
+        return schedule(tasks)
+
+    def _execute_wave(self, wave, task_dir, manifest=None):
+        from src.executor_v2 import execute_wave_v2
+        from src.checkpointing import Checkpointer
+        
+        checkpoint_dir = f"{task_dir}/checkpoints"
+        checkpointer = Checkpointer(checkpoint_dir)
+        execute_wave_v2(wave, task_dir, manifest, checkpointer)
+
+    def _generate_report(self, waves):
+        from src.collector import generate_report
+        return generate_report(waves)
