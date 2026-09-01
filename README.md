@@ -114,6 +114,22 @@ The execution UI shows token usage and estimated cost when provider pricing and 
 └── tests/               # Unit and integration tests
 ```
 
+## Improvements
+
+### Robust Validation
+Plans are validated using `opencode` with retry logic (up to 3 retries, 120s timeout each).
+
+### Cost Tracking
+Configure pricing in `config/default.yaml` under `pricing`. Costs are displayed per million tokens.
+
+### Checkpointing & Resume
+Execution state is saved after each wave. Use `--resume` to continue from where you left off.
+
+### CLI Flags
+- `--verbose`, `-v`: Enable verbose output
+- `--dry-run`, `-n`: Show tasks without executing
+- `--resume`, `-r`: Resume from checkpoint
+
 ## Development
 
 ```bash
