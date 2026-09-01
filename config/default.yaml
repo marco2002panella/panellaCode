@@ -27,3 +27,17 @@ models:
   executor_default: "regolo:qwen3-coder-next"
   task_repair: "regolo:qwen3-coder-next"
   plan_validator: "regolo:qwen3-coder-next"
+
+pricing:
+  regolo:qwen3.6-27b:
+    input: 0.0
+    output: 0.0
+  regolo:qwen3-coder-next:
+    input: 0.0
+    output: 0.0
+  openai:gpt-4o-mini:
+    input: 0.15
+    output: 0.60
+  openai:gpt-4o:
+    input: 5.0
+    output: 15.0
