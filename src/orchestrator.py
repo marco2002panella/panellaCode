@@ -198,15 +198,20 @@ class Orchestrator:
             console.print(console.render_str("[bold green]Plan validation passed[/bold green]"))
         else:
             console.print(console.render_str(f"[bold red]Plan validation failed:\n{validation['issues']}[/bold red]"))
-    def _decompose_with_repair(self, problem: str, repository_context: str = None):
+    def _decompose_with_repair(self, problem: str, manifest_root: str = None):
         from src.decomposer import decompose
-        from src.api_client import APIClient
         from src.config import load_config
+        from src.manifest import load_or_create_manifest, manifest_context
         
         config = load_config()
         model_config = config.get("models", {})
         decomposer_model = model_config.get("decomposer", "openai:gpt-4o-mini")
         repair_model = model_config.get("task_repair", model_config.get("executor_default", "openai:gpt-4o-mini"))
+        
+        repository_context = None
+        if manifest_root:
+            manifest = load_or_create_manifest(manifest_root)
+            repository_context = manifest_context(manifest)
         
         return decompose(
             problem,

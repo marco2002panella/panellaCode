@@ -48,7 +48,7 @@ def interactive(
 ):
     """Run in interactive TUI mode with real-time monitoring and control."""
     orch = Orchestrator(config_path=config)
-    session = InteractiveSession(orch, problem, output)
+    session = InteractiveSession(orch, problem, output, manifest_root=manifest)
     
     try:
         report = session.run()

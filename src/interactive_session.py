@@ -20,10 +20,11 @@ class InteractiveSession:
     ------------------------------
     """
     
-    def __init__(self, orchestrator: Orchestrator, problem: str, output_dir: str):
+    def __init__(self, orchestrator: Orchestrator, problem: str, output_dir: str, manifest_root: str = None):
         self.orchestrator = orchestrator
         self.problem = problem
         self.output_dir = output_dir
+        self.manifest_root = manifest_root
         self.input_handler = InputHandler()
         self._paused = False
         self._skipped_waves: set = set()
@@ -33,7 +34,7 @@ class InteractiveSession:
         cost_tracker = self.orchestrator.cost_tracker
         
         print("🔄 Decomposing problem...")
-        tasks = self.orchestrator._decompose_with_repair(self.problem)
+        tasks = self.orchestrator._decompose_with_repair(self.problem, self.manifest_root)
         
         print("📋 Scheduling tasks...")
         waves = self.orchestrator._schedule_tasks(tasks)
