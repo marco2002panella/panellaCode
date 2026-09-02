@@ -1,4 +1,4 @@
-# myagent
+# problemSolver
 
 A personal AI agent that decomposes complex problems into parallelizable subtasks, executes them across multiple LLM providers, and collects structured results.
 
@@ -40,6 +40,9 @@ models:
 ## Usage
 
 ```bash
+# Launch the GUI (type a problem and press Enter)
+python main.py
+
 # Solve a problem
 python main.py run "Build a REST API with FastAPI for a todo app"
 

@@ -203,11 +203,11 @@ class Orchestrator:
             console.print(console.render_str("[bold green]Plan validation passed[/bold green]"))
         else:
             console.print(console.render_str(f"[bold red]Plan validation failed:\n{validation['issues']}[/bold red]"))
-    def _decompose_with_repair(self, problem: str, manifest_root: str = None):
+    def _decompose_with_repair(self, problem: str, manifest_root: str = None, decomposer_model: str = None):
         from src.decomposer import decompose
         from src.manifest import load_or_create_manifest, manifest_context
         
-        decomposer_model = self.model_config.get("decomposer", "opencode_zen:big-pickle")
+        decomposer_model = decomposer_model or self.model_config.get("decomposer", "opencode_zen:big-pickle")
         repair_model = self.model_config.get("task_repair", self.model_config.get("executor_default", "opencode_zen:big-pickle"))
         
         repository_context = None
@@ -240,6 +240,14 @@ class Orchestrator:
         checkpoint_dir = f"{task_dir}/checkpoints"
         checkpointer = Checkpointer(checkpoint_dir)
         execute_wave_v2(wave, task_dir, manifest, checkpointer, self.router)
+
+    def _execute_wave_stream(self, wave, task_dir, manifest=None, checkpointer=None,
+                             on_output=None, on_done=None):
+        from src.executor_stream import execute_wave_v2_stream
+        execute_wave_v2_stream(
+            wave, task_dir, manifest, checkpointer, self.router,
+            on_output=on_output, on_done=on_done,
+        )
 
     def _generate_report(self, waves):
         from src.collector import generate_report

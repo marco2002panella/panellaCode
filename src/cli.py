@@ -1,10 +1,21 @@
-import os
 import typer
 from typing import Optional
 from src.orchestrator import Orchestrator
 from src.interactive_session import InteractiveSession
+from src.tui.run_tui import run_gui
 
-app = typer.Typer()
+app = typer.Typer(name="problemSolver", help="Problem orchestrator with live TUI")
+
+
+@app.callback(invoke_without_command=True)
+def _main(ctx: typer.Context):
+    """If invoked with no subcommand, launch the GUI."""
+    if ctx.invoked_subcommand is None:
+        run_gui(config="config/default.yaml")
+
+
+def _run_or_gui(config: str = "config/default.yaml"):
+    return run_gui(config=config)
 
 
 @app.command()
@@ -59,4 +70,4 @@ def interactive(
 
 @app.command()
 def version():
-    typer.echo("myagent 0.1.0")
+    typer.echo("problemSolver 0.1.0")
